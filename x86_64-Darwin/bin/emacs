@@ -1,0 +1,17 @@
+#!/bin/bash
+
+#open -W -n -a /Applications/MacPorts/Emacs.app "$@"
+
+use_open=yes
+for var in "$@"
+do
+    if [ "${var:0:1}" == "-" ] || [ "${var:0:1}" == "+" ] || [ ! -e "${var}" ]; then
+        use_open=no
+    fi
+done
+
+if [ $use_open == "yes" ]; then
+    open -W -n -a /Applications/MacPorts/Emacs.app "$@"
+else
+    /Applications/MacPorts/Emacs.app/Contents/MacOS/Emacs "$@"
+fi
