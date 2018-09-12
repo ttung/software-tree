@@ -1,4 +1,4 @@
-#!/usr/bin/env python
+#!/usr/bin/python
 
 import sys
 
@@ -23,10 +23,13 @@ def create_table(conn, cursor):
 
 def read_history(conn, cursor, input_stream):
     def input_generator(input_stream):
+        import codecs
+
         timestamp = None
         command = []
 
         for line in input_stream:
+            line = codecs.decode(line, 'utf8')
             splitted = line.strip().split(None, 4)
 
             # if we have the markers, this is some sort of a history entry.
@@ -98,7 +101,7 @@ def main(args):
 
     parser.add_option("-d", dest="db", type="string", default=os.path.expanduser("~/.shell_history"))
     parser.add_option("-m", dest="max", type="int", default=500000)
-    parser.add_option("-l", dest="limit", type="int", default=2500)
+    parser.add_option("-l", dest="limit", type="int", default=1000)
 
 
     options, leftover = parser.parse_args(args)
