@@ -4,7 +4,7 @@ set -x
 
 hg boo -d $(hg boo -q | egrep -v '(^tonytung|^master$)')
 hg boo -d $(hg log -T "{join(bookmarks, '\n')}\n" -r 'obsolete() & (author(ttung) | author(tonytung))')
-hg pull
+hg pull --hidden
 hg boo -d $(hg oldbm)
 #hg strip -r 'obsolete() & (!ancestors(!author(ttung)) & !ancestors(master))'
 
@@ -32,6 +32,8 @@ for rev in $(hg log -T '{node}\n' -r 'children(ancestors(master)) & (!ancestors(
             hg rebase -d master -r 'descendants('$rev') & (!obsolete())'
         fi
     fi
+
+    hg sl
 done
 
 set +e
@@ -39,6 +41,6 @@ set +e
 hg boo -d $(hg oldbm)
 
 # examine all the revs that are not in the master lineage, and are not part of a bookmark's history.
-hg strip -r 'children(ancestors(master) & !master) & (!ancestors(master)) & (not (bookmark() or ancestors(bookmark())))'
+hg strip -r 'children(ancestors(master) & !master) & (!ancestors(master)) & (not ancestors(bookmark()))'
 
 exit 0
