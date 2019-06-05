@@ -1,10 +1,13 @@
 #!/usr/bin/python
 
+import argparse
+import codecs
+import os
+import sqlite3
 import sys
+import tempfile
 
 def open_db_connection(filename):
-    import sqlite3
-
     return sqlite3.connect(filename)
 
 
@@ -21,10 +24,16 @@ def create_table(conn, cursor):
     cursor.execute("""CREATE INDEX IF NOT EXISTS date_index ON history (date)""")
 
 
+def read_one(conn, cursor, input_stream):
+    line = input_stream.read().rstrip("\n")
+    cursor.execute(
+        """INSERT OR IGNORE INTO history(date, command) VALUES(STRFTIME("%s", "now"), ?)""",
+        (line,))
+    conn.commit()
+
+
 def read_history(conn, cursor, input_stream):
     def input_generator(input_stream):
-        import codecs
-
         timestamp = None
         command = []
 
@@ -66,19 +75,25 @@ def read_history(conn, cursor, input_stream):
     conn.commit()
 
 
-# def trim_history(conn, cursor, history_count):
-#     # find the nth item when ordered by time.
-#     cursor.execute("""SELECT date FROM history ORDER BY DATE DESC LIMIT %d,1""" % history_count)
+def trim_history(conn, cursor, history_count):
+    cursor.execute("""SELECT COUNT(1) FROM history""")
+    results = cursor.fetchall()
+    assert(len(results) == 1)
+    if results[0][0] < history_count:
+        return
 
-#     results = cursor.fetchall()
-#     assert(len(results) <= 1)
+    # find the nth item when ordered by time.
+    cursor.execute("""SELECT date FROM history ORDER BY DATE DESC LIMIT %d,1""" % history_count)
 
-#     if (len(results) == 0):
-#         # don't need trimming
-#         return
+    results = cursor.fetchall()
+    assert(len(results) <= 1)
 
-#     cursor.execute("""DELETE FROM history WHERE date < %d""" % results[0][0])
-#     conn.commit()
+    if (len(results) == 0):
+        # don't need trimming
+        return
+
+    cursor.execute("""DELETE FROM history WHERE date < %d""" % results[0][0])
+    conn.commit()
 
 
 def dump_history(conn, cursor, output_stream, limit):
@@ -92,34 +107,57 @@ def dump_history(conn, cursor, output_stream, limit):
         output_stream.write(("#%d\n%s\n" % result).encode('utf8'))
 
 
-def main(args):
-    import optparse
-    import os
-    import tempfile
+def main():
+    parser = argparse.ArgumentParser()
 
-    parser = optparse.OptionParser()
+    parser.add_argument(
+        "--action",
+        choices=("ingest-and-output", "ingest-one"),
+        default="ingest-and-output",
+    )
+    parser.add_argument(
+        "-d", "--db",
+        type=str,
+        default=os.path.expanduser("~/.shell_history"),
+    )
+    parser.add_argument(
+        "--trim-to",
+        type=int,
+        default=sys.maxsize,
+        help=(
+            "Trim the database to %(dest) rows.  If unspecified, database is "
+            "not trimmed"
+        ),
+    )
+    parser.add_argument(
+        "-l", "--output-limit",
+        type=int,
+        default=1000,
+    )
 
-    parser.add_option("-d", dest="db", type="string", default=os.path.expanduser("~/.shell_history"))
-    parser.add_option("-m", dest="max", type="int", default=500000)
-    parser.add_option("-l", dest="limit", type="int", default=1000)
+    args = parser.parse_args()
 
-
-    options, leftover = parser.parse_args(args)
-
-    conn = open_db_connection(options.db)
+    conn = open_db_connection(args.db)
     cursor = conn.cursor()
     create_table(conn, cursor)
-    read_history(conn, cursor, sys.stdin)
-    #trim_history(conn, cursor, options.max)
 
-    # write this to a temp file.
-    tfh = tempfile.NamedTemporaryFile(delete=False)
-    name = tfh.name
+    if args.action == "ingest-and-output":
+        read_history(conn, cursor, sys.stdin)
+    if args.action == "ingest-one":
+        read_one(conn, cursor, sys.stdin)
 
-    dump_history(conn, cursor, tfh, options.limit)
+    trim_history(conn, cursor, args.trim_to)
+
+    if args.action == "ingest-and-output":
+        # write this to a temp file.
+        tfh = tempfile.NamedTemporaryFile(delete=False)
+        name = tfh.name
+
+        dump_history(conn, cursor, tfh, args.output_limit)
+        print(name)
+
     conn.close()
 
-    print(name)
 
 if __name__ == "__main__":
-    main(sys.argv)
+    main()
