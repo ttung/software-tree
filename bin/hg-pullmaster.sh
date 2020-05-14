@@ -2,7 +2,7 @@
 
 set -x
 
-hg boo -d $(hg boo -q | egrep -v '(^tonytung|^master$)')
+hg boo -d $(hg boo -q | egrep -v '^(ttung|tonytung|master$)')
 hg boo -d $(hg log -T "{join(bookmarks, '\n')}\n" -r 'obsolete() & (author(ttung) | author(tonytung))')
 hg pull --hidden
 hg boo -d $(hg oldbm)
