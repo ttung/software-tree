@@ -2,21 +2,26 @@
 
 set -x
 
-hg boo -d $(hg boo -q | egrep -v '^(ttung|tonytung|master$)')
+if hg log -r master > /dev/null 2> /dev/null; then
+    trunk=master
+elif hg log -r trunk > /dev/null 2> /dev/null; then
+    trunk=trunk
+fi
+
+hg boo -d $(hg boo -q | egrep -v '^(ttung|tonytung|master$|trunk$)')
 hg boo -d $(hg log -T "{join(bookmarks, '\n')}\n" -r 'obsolete() & (author(ttung) | author(tonytung))')
 hg pull --hidden
-hg boo -d $(hg oldbm)
-#hg strip -r 'obsolete() & (!ancestors(!author(ttung)) & !ancestors(master))'
+hg boo -d $(hg log -T "{join(bookmarks, '\n')}\n" -r "ancestors(${trunk}) & bookmark()" | egrep -v ^${trunk}$)
 
 set -e
 
-for rev in $(hg log -T '{node}\n' -r 'children(ancestors(master)) & (!ancestors(master)) & (author(ttung) | author(tonytung))'); do
+for rev in $(hg log -T '{node}\n' -r "children(ancestors(${trunk})) & (!ancestors(${trunk})) & (author(ttung) | author(tonytung))"); do
     echo "Considering $rev..."
     if [ "$(hg log -r 'descendants('$rev') & !(author(ttung) | author(tonytung))')" != "" ]; then
         # has descendants that are not authored by me.
         if [ "$(hg log -r '('$rev' & !obsolete())')" != "" ]; then
             # not obsolete, rebase
-            hg rebase --keep -d master -r "$rev::(descendants($rev) & (author(ttung) | author(tonytung)))"
+            hg rebase --keep -d "${trunk}" -r "$rev::(descendants($rev) & (author(ttung) | author(tonytung)))"
             for rebasedrev in $(hg log -T '{node}\n' -r "$rev::(descendants($rev) & (author(ttung) | author(tonytung)))"); do
                 hg debugobsolete $rebasedrev
             done
@@ -29,7 +34,7 @@ for rev in $(hg log -T '{node}\n' -r 'children(ancestors(master)) & (!ancestors(
 
         # we may have stripped everything, so make sure something is still there before continuing.
         if [ "$(hg log --hidden -r '('$rev' & !(hidden()))')" != "" ]; then
-            hg rebase -d master -r 'descendants('$rev') & (!obsolete())'
+            hg rebase -d "${trunk}" -r 'descendants('$rev') & (!obsolete())'
         fi
     fi
 
@@ -38,9 +43,7 @@ done
 
 set +e
 
-hg boo -d $(hg oldbm)
+hg boo -d $(hg log -T "{join(bookmarks, '\n')}\n" -r "ancestors(${trunk}) & bookmark()" | egrep -v ^${trunk}$)
 
-# examine all the revs that are not in the master lineage, and are not part of a bookmark's history.
-hg strip -r 'children(ancestors(master) & !master) & (!ancestors(master)) & (not ancestors(bookmark()))'
-
-exit 0
+# examine all the revs that are not in the trunk/master lineage, and are not part of a bookmark's history.
+hg strip -r "children(ancestors(${trunk}) & !${trunk}) & (!ancestors(${trunk})) & (not ancestors(bookmark()))" || true
