@@ -6,6 +6,9 @@ if hg log -r master > /dev/null 2> /dev/null; then
     trunk=master
 elif hg log -r trunk > /dev/null 2> /dev/null; then
     trunk=trunk
+else
+    echo "Could not determine what the upstream trunk branch is."
+    exit 1
 fi
 
 hg boo -d $(hg boo -q | egrep -v '^(ttung|tonytung|master$|trunk$)')
